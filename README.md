@@ -9,7 +9,7 @@ Authors: *Yvon Apedo*, *Huanjie Tao*
 
 ## Usage
 ### Datasets
-Download the CrackForest, crackls315,[crack537](https://www.sciencedirect.com/science/article/pii/S0925231219300566) dataset and the file follows the following structure.
+Download the Cracktree200, CrackForest, CrackLS315, and Stone331 dataset and the file follows the following structure.
 
 ```
 |-- datasets
