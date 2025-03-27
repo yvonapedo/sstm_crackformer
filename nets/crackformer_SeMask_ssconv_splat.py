@@ -157,14 +157,14 @@ class Bottleneck(nn.Module):
         hidden_planes = max(planes,in_planes) // self.expansion
         self.conv1 = nn.Conv2d(in_planes, hidden_planes, kernel_size=1, bias=False)
         self.bn1 = nn.GroupNorm(hidden_planes //4,
-                                hidden_planes)  
+                                hidden_planes)
         self.conv2 = nn.ModuleList([TFBlock(hidden_planes, hidden_planes)])
         self.bn2 = nn.GroupNorm(hidden_planes // 4,
-                                hidden_planes)  
-        self.conv2.append(nn.GELU()) 
+                                hidden_planes)
+        self.conv2.append(nn.GELU())
         self.conv2 = nn.Sequential(*self.conv2)
         self.conv3 = nn.Conv2d(hidden_planes, planes, kernel_size=1, bias=False)
-        self.bn3 = nn.GroupNorm(planes // 4, planes)  
+        self.bn3 = nn.GroupNorm(planes // 4, planes)
         self.GELU=nn.GELU()
         self.shortcut = nn.Sequential()
         if in_planes!=planes:
@@ -173,9 +173,9 @@ class Bottleneck(nn.Module):
                 nn.GroupNorm(planes//4,planes)
             )
     def forward(self, x):
-        out = self.GELU(self.bn1(self.conv1(x)))  
+        out = self.GELU(self.bn1(self.conv1(x)))
         out = self.conv2(out)
-        out = self.GELU(self.bn3(self.conv3(out))) 
+        out = self.GELU(self.bn3(self.conv3(out)))
         out += self.shortcut(x)
         return out
 
@@ -228,7 +228,7 @@ class LABlock(nn.Module):
         return psi
 
 
-class Fuse(nn.Module):
+class FRB(nn.Module):
 
     def __init__(self, nn, scale):
         super().__init__()
@@ -270,7 +270,7 @@ class Down2(nn.Module):
 
     def __init__(self):
         super(Down2, self).__init__()
-        self.nn1 = Trans_EB(64, 128) 
+        self.nn1 = Trans_EB(64, 128)
         self.nn2 = Trans_EB(128, 128)
         self.patch_embed = torch.nn.MaxPool2d(kernel_size=2, stride=2, return_indices=True)
 
@@ -287,7 +287,7 @@ class Down3(nn.Module):
     def __init__(self):
         super(Down3, self).__init__()
 
-        self.nn1 = Trans_EB(128, 256) 
+        self.nn1 = Trans_EB(128, 256)
         self.nn2 = Trans_EB(256, 256)
         self.nn3 = Trans_EB(256, 256)
         self.patch_embed = torch.nn.MaxPool2d(kernel_size=2, stride=2, return_indices=True)
@@ -490,11 +490,11 @@ class crackformer(nn.Module):
         self.up4 = Up4()
         self.up5 = Up5()
 
-        self.fuse5 = Fuse(ConvRelu(512 + 512, 64), scale=16)
-        self.fuse4 = Fuse(ConvRelu(512 + 256, 64), scale=8)
-        self.fuse3 = Fuse(ConvRelu(256 + 128, 64), scale=4)
-        self.fuse2 = Fuse(ConvRelu(128 + 64, 64), scale=2)
-        self.fuse1 = Fuse(ConvRelu(64 + 64, 64), scale=1)
+        self.frb5 = FRB(ConvRelu(512 + 512, 64), scale=16)
+        self.frb4 = FRB(ConvRelu(512 + 256, 64), scale=8)
+        self.frb3 = FRB(ConvRelu(256 + 128, 64), scale=4)
+        self.frb2 = FRB(ConvRelu(128 + 64, 64), scale=2)
+        self.frb1 = FRB(ConvRelu(64 + 64, 64), scale=1)
 
         self.final = Conv1X1(5, 1)
 
@@ -552,12 +552,12 @@ class crackformer(nn.Module):
         attention3 = self.LABlock_3([scale3_1, scale3_2, scale3_4, scale3_5])
         attention4 = self.LABlock_4([scale4_1, scale4_2, scale4_4, scale4_5])
         attention5 = self.LABlock_5([scale5_1, scale5_2, scale5_4, scale5_5])
-        # fuse part
-        fuse5 = self.fuse5(down_inp=scale5_3, up_inp=up5, size=[inputs.shape[2], inputs.shape[3]], attention=attention5)
-        fuse4 = self.fuse4(down_inp=scale4_3, up_inp=up4, size=[inputs.shape[2], inputs.shape[3]], attention=attention4)
-        fuse3 = self.fuse3(down_inp=scale3_3, up_inp=up3, size=[inputs.shape[2], inputs.shape[3]], attention=attention3)
-        fuse2 = self.fuse2(down_inp=scale2_2, up_inp=up2, size=[inputs.shape[2], inputs.shape[3]], attention=attention2)
-        fuse1 = self.fuse1(down_inp=scale1_2, up_inp=up1, size=[inputs.shape[2], inputs.shape[3]], attention=attention1)
+        # frb part
+        frb5 = self.frb5(down_inp=scale5_3, up_inp=up5, size=[inputs.shape[2], inputs.shape[3]], attention=attention5)
+        frb4 = self.frb4(down_inp=scale4_3, up_inp=up4, size=[inputs.shape[2], inputs.shape[3]], attention=attention4)
+        frb3 = self.frb3(down_inp=scale3_3, up_inp=up3, size=[inputs.shape[2], inputs.shape[3]], attention=attention3)
+        frb2 = self.frb2(down_inp=scale2_2, up_inp=up2, size=[inputs.shape[2], inputs.shape[3]], attention=attention2)
+        frb1 = self.frb1(down_inp=scale1_2, up_inp=up1, size=[inputs.shape[2], inputs.shape[3]], attention=attention1)
 
         out_64 = rearrange(out_64, 'a b c d -> a d b c')
         out_128 = rearrange(out_128, 'a b c d -> a d b c')
@@ -575,13 +575,13 @@ class crackformer(nn.Module):
 
         se_mask_out = F.interpolate(se_mask_out, size=(512, 512), mode='bilinear', align_corners=True)
 
-        output = torch.cat([fuse5, fuse4, fuse3, fuse2, fuse1], 1)
+        output = torch.cat([frb5, frb4, frb3, frb2, frb1], 1)
 
         output = torch.mul(output, se_mask_out)
         output = self.final(output)
 
 
-        # return fuse5, fuse4, fuse3, fuse2, fuse1, output
+        # return frb5, frb4, frb3, frb2, frb1, output
         return output
 
 
